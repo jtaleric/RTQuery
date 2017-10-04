@@ -1,6 +1,8 @@
-import requests, json
+import requests
+import json
 import kerberos
 import pprint
+
 
 class KerberosTicket(object):
 
@@ -10,7 +12,7 @@ class KerberosTicket(object):
         self._krb_context = krb_context
         self.auth_header = ("Negotiate " +
                             kerberos.authGSSClientResponse(krb_context))
- 
+
     def verify_response(self, auth_header):
         # Handle comma-separated lists of authentication fields
         for field in auth_header.split(","):
@@ -27,4 +29,3 @@ class KerberosTicket(object):
         self._krb_context = None
         kerberos.authGSSClientStep(krb_context, auth_details)
         kerberos.authGSSClientClean(krb_context)
-
