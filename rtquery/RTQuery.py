@@ -1,6 +1,21 @@
+#   Copyright 2017 Joe Talerico
+#
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+
 import Elastic
 import KerberosTicket
 import requests
+from dateutil.parser import parse
 
 
 class RTQuery(object):
@@ -29,10 +44,14 @@ class RTQuery(object):
                 lab_requests[str(values[0].strip())] = str(values[1].strip())
         return lab_requests
 
+    def es_insert_rt(self, rt_id, request) :
+        if len(self.es_search_rt(rt_id)) is 0 :
+           return self.es.index(request,self.CONFIG['index'])
+
     def es_search_rt(self, rt_id):
         query = {"query": {"match": {"ticket": rt_id}}}
-        self.es.search("validation-errors",query)
-        return True
+        req = self.es.search(self.CONFIG['index'],query)
+        return req['hits']['hits']
 
     def rt_history(self, rt_id):
         history = []
@@ -58,11 +77,39 @@ class RTQuery(object):
         request = {}
         for line in r.text.split('\n'):
             if ':' in line:
-                values = line.split(":")
+                values = line.split(":",2)
                 if len(values) > 2:
-                    request[str(values[1].encode('utf-8').strip())
-                            ] = str(values[2].encode('utf-8').strip())
+                    request[str(values[0].encode('utf-8').strip())
+                            ] = str(values[1].encode('utf-8').strip())
                 else:
                     request[str(values[0].encode('utf-8').strip())
                             ] = str(values[1].encode('utf-8').strip())
         return request
+
+    def rt_es_mapper(self, request):
+        mapper = {'timestamp': request['Created'],
+               'author': request['Creator'],
+               'description': request['Description'],
+               'ticket': request['Ticket'],
+               'id': request['id']}
+        if 'Use Case' in request :
+            mapper['use'] = request['Use Case'],
+        if 'are you targeting to improve?' in request :
+            mapper['use'] = request['are you targeting to improve?'],
+        else :
+            mapper['use'] = 'unknown'
+        if 'Red Hat product(s) being tested' in request: 
+               mapper['product'] =  request['Red Hat product(s) being tested'],
+        elif 'Performance Red Hat product(s) being tested' in request:
+               mapper['product'] =  request['Performance Red Hat product(s) being tested']
+        else:
+               mapper['product'] = 'unknown' 
+        if 'Number of nodes being requested' in request :
+               mapper['node_count'] = request['Number of nodes being requested'].split(" ")[0],
+        elif 'being requested' in request:
+               mapper['node_count'] = request['being requested'].split(" ")[0],
+        elif 'Platform Number of nodes being requested' in request :
+               mapper['node_count'] = request['Platform Number of nodes being requested'].split(" ")[0],
+        else:
+               mapper['node_count'] = 0,
+        return mapper
